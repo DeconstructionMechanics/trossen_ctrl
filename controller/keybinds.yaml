@@ -1,0 +1,94 @@
+# Controller keybinds for the Trossen arm.
+#
+# Action names and descriptions:
+# forward - move +x
+# backward - move -x
+# leftward - move +y
+# rightward - move -y
+# upward - move +z
+# downward - move -z
+# pitchup - rotate +pitch
+# pitchdown - rotate -pitch
+# yawleft - rotate +yaw
+# yawright - rotate -yaw
+# rollleft - rotate +roll
+# rollright - rotate -roll
+# gripperopen - open the gripper
+# gripperclose - close the gripper
+# reset - return to the configured return target
+# sensitivityup - increase controller sensitivity
+# sensitivitydown - decrease controller sensitivity
+# quit - stop the control loop
+#
+# Keyboard values are terminal keys. Ctrl-C and Esc always quit.
+# Xbox button values are Linux evdev button names:
+#   BTN_SOUTH - A button
+#   BTN_EAST - B button
+#   BTN_NORTH - Y button
+#   BTN_WEST - X button
+#   BTN_TL - left bumper (LB)
+#   BTN_TR - right bumper (RB)
+#   BTN_SELECT - View/Back button
+#   BTN_START - Menu/Start button
+#
+# The small cross-shaped directional pad on the left is usually NOT exposed as
+# four buttons. Linux normally reports it as two hat axes. It is intentionally
+# left unbound below so you can reuse it for non-duplicate controls later:
+#   ABS_HAT0X:- - D-pad left
+#   ABS_HAT0X:+ - D-pad right
+#   ABS_HAT0Y:- - D-pad up
+#   ABS_HAT0Y:+ - D-pad down
+#
+# Xbox axis values use AXIS:+ or AXIS:-:
+#   ABS_X - left stick horizontal; - is left, + is right
+#   ABS_Y - left stick vertical; - is up/forward, + is down/backward
+#   ABS_RX - right stick horizontal; - is left, + is right
+#   ABS_RY - right stick vertical; - is up, + is down
+#   ABS_Z - left trigger; + is pressed
+#   ABS_RZ - right trigger; + is pressed
+#   ABS_HAT0X - D-pad horizontal; - is left, + is right
+#   ABS_HAT0Y - D-pad vertical; - is up, + is down
+#
+# D-pad directions may be used in xbox_buttons for button-like actions such as
+# gripper or sensitivity. Example: sensitivityup: ABS_HAT0Y:-
+
+keyboard:
+  forward: w
+  backward: s
+  leftward: a
+  rightward: d
+  upward: e
+  downward: q
+  pitchup: i
+  pitchdown: k
+  yawleft: j
+  yawright: l
+  rollleft: u
+  rollright: o
+  gripperopen: x
+  gripperclose: z
+  reset: c
+  sensitivityup: =
+  sensitivitydown: "-"
+
+xbox_buttons:
+  gripperclose: ABS_HAT0X:-
+  gripperopen: ABS_HAT0X:+
+  reset: BTN_SELECT
+  rollleft: BTN_TL
+  rollright: BTN_TR
+  sensitivityup: ABS_HAT0Y:-
+  sensitivitydown: ABS_HAT0Y:+
+  quit: BTN_START
+
+xbox_axes:
+  leftward: ABS_X:-
+  rightward: ABS_X:+
+  forward: ABS_Y:-
+  backward: ABS_Y:+
+  yawleft: ABS_RX:-
+  yawright: ABS_RX:+
+  pitchup: ABS_RY:-
+  pitchdown: ABS_RY:+
+  downward: ABS_Z:+
+  upward: ABS_RZ:+
