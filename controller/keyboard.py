@@ -1,6 +1,6 @@
 """Keyboard input mapped to 6 + 1 degree arm commands.
 
-Edit controller/keybinds.yaml to change the terminal controls.
+Edit controller/config.yaml to change the terminal controls.
 
 Movement:
     w/s: x forward/backward
@@ -33,7 +33,12 @@ from .commands import (
     MotionCommand,
     SENSITIVITY_ACTIONS,
 )
-from .config import ACTION_DESCRIPTIONS, load_keybind_config
+from .config import (
+    ACTION_DESCRIPTIONS,
+    load_keybind_config,
+    sensitivity_config,
+    validate_sensitivity_bounds,
+)
 
 QUIT_KEYS = {"\x03", "\x1b"}
 
@@ -66,13 +71,14 @@ class CartesianKeyboardController:
         gripper_step: float = 0.005,
         key_bindings: Optional[dict[str, str]] = None,
         config_path: Optional[str] = None,
-        sensitivity: float = 1.0,
+        sensitivity: Optional[float] = None,
         sensitivity_factor: float = 1.25,
-        min_sensitivity: float = 0.1,
-        max_sensitivity: float = 10.0,
+        min_sensitivity: Optional[float] = None,
+        max_sensitivity: Optional[float] = None,
         key_release_timeout: float = 0.06,
     ):
         config = load_keybind_config(config_path)
+        sensitivity_settings = sensitivity_config(config)
         self.key_bindings = key_bindings or config["keyboard"]
         self.key_to_action = {
             key.lower(): action for action, key in self.key_bindings.items()
@@ -80,10 +86,24 @@ class CartesianKeyboardController:
         self.linear_rate = linear_step
         self.angular_rate = angular_step
         self.gripper_rate = gripper_step
-        self.sensitivity = sensitivity
+        self.sensitivity = (
+            sensitivity
+            if sensitivity is not None
+            else sensitivity_settings["default_sensitivity"]
+        )
         self.sensitivity_factor = sensitivity_factor
-        self.min_sensitivity = min_sensitivity
-        self.max_sensitivity = max_sensitivity
+        self.min_sensitivity = (
+            min_sensitivity
+            if min_sensitivity is not None
+            else sensitivity_settings["min_sensitivity"]
+        )
+        self.max_sensitivity = (
+            max_sensitivity
+            if max_sensitivity is not None
+            else sensitivity_settings["max_sensitivity"]
+        )
+        validate_sensitivity_bounds(self.min_sensitivity, self.max_sensitivity)
+        self.sensitivity = self._clamp_sensitivity(self.sensitivity)
         self.key_release_timeout = key_release_timeout
         self.active_actions: dict[str, float] = {}
         self.last_tick = time.monotonic()
@@ -197,10 +217,10 @@ class CartesianKeyboardController:
             self.sensitivity *= self.sensitivity_factor
         elif action == "sensitivitydown":
             self.sensitivity /= self.sensitivity_factor
-        self.sensitivity = min(
-            max(self.sensitivity, self.min_sensitivity),
-            self.max_sensitivity,
-        )
+        self.sensitivity = self._clamp_sensitivity(self.sensitivity)
+
+    def _clamp_sensitivity(self, value: float) -> float:
+        return min(max(value, self.min_sensitivity), self.max_sensitivity)
 
     def print_help(self):
         print("Keyboard Cartesian control")

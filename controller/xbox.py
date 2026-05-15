@@ -1,6 +1,6 @@
 """Xbox controller input mapped to 6 + 1 degree arm commands.
 
-Edit controller/keybinds.yaml to change the controls.
+Edit controller/config.yaml to change the controls.
 
 Buttons:
     A/B: close/open gripper
@@ -83,6 +83,8 @@ from .config import (
     ACTION_DESCRIPTIONS,
     XBOX_CONTROL_DESCRIPTIONS,
     load_keybind_config,
+    sensitivity_config,
+    validate_sensitivity_bounds,
 )
 
 
@@ -100,10 +102,10 @@ class XboxController:
         deadzone_fraction: float = 0.125,
         grab_device: bool = True,
         config_path: Optional[str] = None,
-        sensitivity: float = 1.0,
+        sensitivity: Optional[float] = None,
         sensitivity_factor: float = 1.25,
-        min_sensitivity: float = 0.1,
-        max_sensitivity: float = 10.0,
+        min_sensitivity: Optional[float] = None,
+        max_sensitivity: Optional[float] = None,
     ):
         if InputDevice is None:
             raise SystemExit(
@@ -112,6 +114,7 @@ class XboxController:
             )
 
         config = load_keybind_config(config_path)
+        sensitivity_settings = sensitivity_config(config)
         self.button_bindings = config["xbox_buttons"]
         self.axis_binding_config = config["xbox_axes"]
         self.button_to_action = {
@@ -131,10 +134,24 @@ class XboxController:
         self.angular_rate = angular_step
         self.gripper_rate = gripper_step
         self.deadzone_fraction = deadzone_fraction
-        self.sensitivity = sensitivity
+        self.sensitivity = (
+            sensitivity
+            if sensitivity is not None
+            else sensitivity_settings["default_sensitivity"]
+        )
         self.sensitivity_factor = sensitivity_factor
-        self.min_sensitivity = min_sensitivity
-        self.max_sensitivity = max_sensitivity
+        self.min_sensitivity = (
+            min_sensitivity
+            if min_sensitivity is not None
+            else sensitivity_settings["min_sensitivity"]
+        )
+        self.max_sensitivity = (
+            max_sensitivity
+            if max_sensitivity is not None
+            else sensitivity_settings["max_sensitivity"]
+        )
+        validate_sensitivity_bounds(self.min_sensitivity, self.max_sensitivity)
+        self.sensitivity = self._clamp_sensitivity(self.sensitivity)
         self.active_buttons: set[str] = set()
         self.active_axis_buttons: dict[str, float] = {}
         self.axis_amounts: dict[str, float] = {}
@@ -335,10 +352,10 @@ class XboxController:
             self.sensitivity *= self.sensitivity_factor
         elif action == "sensitivitydown":
             self.sensitivity /= self.sensitivity_factor
-        self.sensitivity = min(
-            max(self.sensitivity, self.min_sensitivity),
-            self.max_sensitivity,
-        )
+        self.sensitivity = self._clamp_sensitivity(self.sensitivity)
+
+    def _clamp_sensitivity(self, value: float) -> float:
+        return min(max(value, self.min_sensitivity), self.max_sensitivity)
 
     def print_help(self):
         print(f"Xbox Cartesian control on {self.device.name} at {self.device.path}")

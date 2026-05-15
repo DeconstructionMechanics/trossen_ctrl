@@ -21,7 +21,6 @@ python test.py --controller keyboard
 python test.py --controller xbox --device /dev/input/event0
 ```
 
-Controller keybinds live in `controller/keybinds.yaml`.
-
+Controller keybinds and sensitivity limits live in `controller/config.yaml`.
 
 

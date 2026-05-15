@@ -1,4 +1,4 @@
-# Controller keybinds for the Trossen arm.
+# Controller configuration for the Trossen arm.
 #
 # Action names and descriptions:
 # forward - move +x
@@ -31,14 +31,6 @@
 #   BTN_SELECT - View/Back button
 #   BTN_START - Menu/Start button
 #
-# The small cross-shaped directional pad on the left is usually NOT exposed as
-# four buttons. Linux normally reports it as two hat axes. It is intentionally
-# left unbound below so you can reuse it for non-duplicate controls later:
-#   ABS_HAT0X:- - D-pad left
-#   ABS_HAT0X:+ - D-pad right
-#   ABS_HAT0Y:- - D-pad up
-#   ABS_HAT0Y:+ - D-pad down
-#
 # Xbox axis values use AXIS:+ or AXIS:-:
 #   ABS_X - left stick horizontal; - is left, + is right
 #   ABS_Y - left stick vertical; - is up/forward, + is down/backward
@@ -48,9 +40,11 @@
 #   ABS_RZ - right trigger; + is pressed
 #   ABS_HAT0X - D-pad horizontal; - is left, + is right
 #   ABS_HAT0Y - D-pad vertical; - is up, + is down
-#
-# D-pad directions may be used in xbox_buttons for button-like actions such as
-# gripper or sensitivity. Example: sensitivityup: ABS_HAT0Y:-
+
+sensitivity:
+  default_sensitivity: 5.0
+  min_sensitivity: 0.1
+  max_sensitivity: 15.0
 
 keyboard:
   forward: w
@@ -75,8 +69,8 @@ xbox_buttons:
   gripperclose: ABS_HAT0X:-
   gripperopen: ABS_HAT0X:+
   reset: BTN_SELECT
-  rollleft: BTN_TL
-  rollright: BTN_TR
+  rollleft: BTN_TR
+  rollright: BTN_TL
   sensitivityup: ABS_HAT0Y:-
   sensitivitydown: ABS_HAT0Y:+
   quit: BTN_START
@@ -88,7 +82,7 @@ xbox_axes:
   backward: ABS_Y:+
   yawleft: ABS_RX:-
   yawright: ABS_RX:+
-  pitchup: ABS_RY:-
-  pitchdown: ABS_RY:+
+  pitchup: ABS_RY:+
+  pitchdown: ABS_RY:-
   downward: ABS_Z:+
   upward: ABS_RZ:+
