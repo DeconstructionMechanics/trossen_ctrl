@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from contextlib import nullcontext
 import math
+import time
 
 from controller import (
     CartesianKeyboardController,
@@ -31,6 +32,8 @@ GOAL_TIME = 0.2
 RESET_GOAL_TIME = 3.0
 CONTROL_PERIOD = 0.05
 MAX_REACH_RADIUS = 0.9
+MODE_INIT_WAIT = 0.5
+MODE_PROBE_GOAL_TIME = 0.5
 BASE_ORIENTATION_ORIGIN = (0.0, 0.0)
 
 
@@ -57,7 +60,7 @@ def build_input_controller(args):
 
 
 class RobotMover:
-    """Apply target states to the driver without mutating the target on failure."""
+    """Apply target states and recover driver mode after runtime errors."""
 
     def __init__(
         self,
@@ -65,11 +68,15 @@ class RobotMover:
         cartesian_interp,
         max_reach_radius: float,
         orientation_origin_xy,
+        position_mode,
+        args,
     ):
         self.driver = driver
         self.cartesian_interp = cartesian_interp
         self.max_reach_radius = max_reach_radius
         self.orientation_origin_xy = tuple(orientation_origin_xy)
+        self.position_mode = position_mode
+        self.args = args
         self._motion_blocked = False
         self._radius_limited = False
 
@@ -78,34 +85,40 @@ class RobotMover:
         state_controller,
         goal_time,
         blocking,
-        set_gripper=True,
+        send_arm=True,
+        send_gripper=True,
     ) -> bool:
-        pose, gripper = state_controller.pose_and_gripper()
-        driver_pose = target_pose_to_driver_pose(
-            pose,
-            self.max_reach_radius,
-            self.orientation_origin_xy,
-        )
-        self._print_radius_limit_notice(pose, driver_pose)
-        try:
-            self.driver.set_cartesian_positions(
-                goal_positions=list(driver_pose),
-                interpolation_space=self.cartesian_interp,
-                goal_time=goal_time,
-                blocking=blocking,
-            )
-        except Exception as exc:
-            if not self._motion_blocked:
-                print(
-                    "\nTarget is outside the reachable Cartesian range; "
-                    f"holding the last valid arm position. Driver error: {exc}"
-                )
-            self._motion_blocked = True
-            _try_clear_driver_error(self.driver)
-            return False
+        if not send_arm and not send_gripper:
+            return True
 
-        self._motion_blocked = False
-        if set_gripper:
+        pose, gripper = state_controller.pose_and_gripper()
+        if send_arm:
+            driver_pose = target_pose_to_driver_pose(
+                pose,
+                self.max_reach_radius,
+                self.orientation_origin_xy,
+            )
+            self._print_radius_limit_notice(pose, driver_pose)
+            try:
+                self.driver.set_cartesian_positions(
+                    goal_positions=list(driver_pose),
+                    interpolation_space=self.cartesian_interp,
+                    goal_time=goal_time,
+                    blocking=blocking,
+                )
+            except Exception as exc:
+                if not self._motion_blocked:
+                    print(
+                        "\nCould not apply Cartesian target; recovering position mode "
+                        f"and holding the measured arm pose. Driver error: {exc}"
+                    )
+                self._motion_blocked = True
+                self._recover_after_driver_error(state_controller, "Cartesian command")
+                return False
+
+            self._motion_blocked = False
+
+        if send_gripper:
             try:
                 self.driver.set_gripper_position(
                     goal_position=gripper,
@@ -114,11 +127,31 @@ class RobotMover:
                 )
             except Exception as exc:
                 print(
-                    "\nCould not apply gripper target; "
-                    f"holding gripper. Driver error: {exc}"
+                    "\nCould not apply gripper target; recovering position mode "
+                    f"and holding gripper. Driver error: {exc}"
                 )
+                self._recover_after_driver_error(state_controller, "gripper command")
                 return False
         return True
+
+    def _recover_after_driver_error(self, state_controller, action_name: str) -> bool:
+        recovered = _recover_position_mode(
+            self.driver,
+            self.position_mode,
+            self.args,
+            action_name,
+        )
+        if not recovered:
+            return False
+        synced = _sync_state_to_driver(
+            self.driver,
+            state_controller,
+            self.orientation_origin_xy,
+            prefix="recovered current pose: ",
+        )
+        if synced:
+            self._motion_blocked = False
+        return synced
 
     def _print_radius_limit_notice(self, target_pose, driver_pose):
         target_radius = _xyz_radius(target_pose)
@@ -316,11 +349,41 @@ def _clamp(value: float, min_value: float, max_value: float) -> float:
     return min(max(value, min_value), max_value)
 
 
+def _sync_state_to_driver(
+    driver,
+    state_controller,
+    orientation_origin_xy=BASE_ORIENTATION_ORIGIN,
+    prefix="",
+) -> bool:
+    cartesian_pose = _try_driver_call(
+        driver,
+        driver.get_cartesian_positions,
+        "read current Cartesian pose",
+        clear_on_error=False,
+    )
+    gripper_position = _try_driver_call(
+        driver,
+        driver.get_gripper_position,
+        "read current gripper position",
+        clear_on_error=False,
+    )
+    if cartesian_pose is None or gripper_position is None:
+        return False
+
+    state_controller.set_state(
+        driver_pose_to_target_pose(cartesian_pose, orientation_origin_xy),
+        gripper_position,
+    )
+    state_controller.print_state(prefix=prefix)
+    return True
+
+
 def return_to_global_initial(
     driver,
     state_controller,
     args,
     orientation_origin_xy=BASE_ORIENTATION_ORIGIN,
+    position_mode=None,
 ):
     arm_positions_current = _try_driver_call(
         driver,
@@ -332,7 +395,7 @@ def return_to_global_initial(
 
     arm_joint_count = len(arm_positions_current)
     arm_positions = [0.0] * arm_joint_count
-    if not _send_global_initial_joint_pose(driver, arm_positions, args):
+    if not _send_global_initial_joint_pose(driver, arm_positions, args, position_mode):
         return False
 
     cartesian_pose = _try_driver_call(
@@ -356,38 +419,128 @@ def return_to_global_initial(
     return True
 
 
-def _send_global_initial_joint_pose(driver, arm_positions, args) -> bool:
+def _send_global_initial_joint_pose(driver, arm_positions, args, position_mode=None) -> bool:
+    for attempt in range(2):
+        try:
+            if hasattr(driver, "set_all_positions"):
+                driver.set_all_positions(
+                    goal_positions=[*arm_positions, args.return_gripper],
+                    goal_time=args.reset_goal_time,
+                    blocking=True,
+                )
+            else:
+                driver.set_arm_positions(
+                    goal_positions=arm_positions,
+                    goal_time=args.reset_goal_time,
+                    blocking=True,
+                )
+                driver.set_gripper_position(
+                    goal_position=args.return_gripper,
+                    goal_time=args.reset_goal_time,
+                    blocking=True,
+                )
+            return True
+        except Exception as exc:
+            if attempt == 0 and position_mode is not None:
+                print(
+                    "\nFailed to return to global initial joint pose; "
+                    f"recovering position mode before retry. Driver error: {exc}"
+                )
+                if _recover_position_mode(
+                    driver,
+                    position_mode,
+                    args,
+                    "return to global initial joint pose",
+                ):
+                    continue
+            print(f"\nFailed to return to global initial joint pose: {exc}")
+            _try_clear_driver_error(driver)
+            return False
+    return False
+
+
+def initialize_position_mode(driver, position_mode, args) -> bool:
+    print("Setting arm to position mode...")
+    try:
+        driver.set_arm_modes(position_mode)
+        driver.set_gripper_mode(position_mode)
+    except Exception as exc:
+        print(f"\nFailed to request position mode: {exc}")
+        _try_clear_driver_error(driver)
+        return False
+
+    if args.mode_init_wait > 0.0:
+        time.sleep(args.mode_init_wait)
+
+    if args.skip_mode_probe:
+        print("Skipping position mode verification probe.")
+        return True
+
+    print("Verifying position mode with zero-motion probe...")
+    arm_positions = _try_driver_call(
+        driver,
+        driver.get_arm_positions,
+        "read current arm joint positions for mode probe",
+    )
+    gripper_position = _try_driver_call(
+        driver,
+        driver.get_gripper_position,
+        "read current gripper position for mode probe",
+    )
+    if arm_positions is None or gripper_position is None:
+        print(
+            "\nPosition mode verification failed before motion probe. "
+            "The arm/gripper may still be in idle mode."
+        )
+        return False
+
     try:
         if hasattr(driver, "set_all_positions"):
             driver.set_all_positions(
-                goal_positions=[*arm_positions, args.return_gripper],
-                goal_time=args.reset_goal_time,
+                goal_positions=[*list(arm_positions), float(gripper_position)],
+                goal_time=args.mode_probe_goal_time,
                 blocking=True,
             )
         else:
             driver.set_arm_positions(
-                goal_positions=arm_positions,
-                goal_time=args.reset_goal_time,
+                goal_positions=list(arm_positions),
+                goal_time=args.mode_probe_goal_time,
                 blocking=True,
             )
             driver.set_gripper_position(
-                goal_position=args.return_gripper,
-                goal_time=args.reset_goal_time,
+                goal_position=float(gripper_position),
+                goal_time=args.mode_probe_goal_time,
                 blocking=True,
             )
     except Exception as exc:
-        print(f"\nFailed to return to global initial joint pose: {exc}")
+        print(
+            "\nPosition mode verification failed. The arm/gripper may still be "
+            "in idle mode, so controller input will not start.\n"
+            f"Driver error: {exc}\n"
+            "Check the Trossen driver/firmware state, e-stop or motor enable "
+            "state, SDK version, and whether another process is controlling "
+            "the arm."
+        )
         _try_clear_driver_error(driver)
         return False
+
+    print("Position mode verified.")
     return True
 
 
-def _try_driver_call(driver, callback, action_name: str):
+def _recover_position_mode(driver, position_mode, args, action_name: str) -> bool:
+    print(f"\nRecovering after {action_name}: clearing error and restoring position mode...")
+    if not _try_clear_driver_error(driver):
+        return False
+    return initialize_position_mode(driver, position_mode, args)
+
+
+def _try_driver_call(driver, callback, action_name: str, clear_on_error=True):
     for attempt in range(2):
         try:
             return callback()
         except Exception as exc:
-            if attempt == 0:
+            if attempt == 0 and clear_on_error:
                 print(f"\nCould not {action_name}; clearing driver error: {exc}")
                 _try_clear_driver_error(driver)
                 continue
@@ -395,13 +548,16 @@ def _try_driver_call(driver, callback, action_name: str):
             return None
 
 
-def _try_clear_driver_error(driver):
+def _try_clear_driver_error(driver) -> bool:
     if not hasattr(driver, "clear_error"):
-        return
+        print("\nDriver does not expose clear_error(); cannot recover automatically.")
+        return False
     try:
         driver.clear_error()
     except Exception as exc:
         print(f"\nCould not clear driver error: {exc}")
+        return False
+    return True
 
 
 def resolve_orientation_origin_xy(args, initial_pose):
@@ -436,9 +592,8 @@ def run(args):
         print("Connecting...")
         driver.configure(model, ee, args.arm_ip, False)
 
-        print("Setting arm to position mode...")
-        driver.set_arm_modes(position_mode)
-        driver.set_gripper_mode(position_mode)
+        if not initialize_position_mode(driver, position_mode, args):
+            return
 
         q0 = np.array(driver.get_arm_positions(), dtype=float)
         pose0 = np.array(driver.get_cartesian_positions(), dtype=float)
@@ -453,6 +608,8 @@ def run(args):
             cartesian_interp,
             args.max_reach_radius,
             orientation_origin_xy,
+            position_mode,
+            args,
         )
 
         print("\nCurrent joint positions:")
@@ -504,6 +661,7 @@ def run(args):
                             state_controller,
                             args,
                             orientation_origin_xy,
+                            position_mode,
                         )
                         break
 
@@ -514,6 +672,7 @@ def run(args):
                             state_controller,
                             args,
                             orientation_origin_xy,
+                            position_mode,
                         )
                         if returned:
                             state_controller.print_state(prefix="reset done: ")
@@ -523,12 +682,16 @@ def run(args):
                     state_controller.print_state(
                         prefix=f"{command.action} sens={command.sensitivity:.2f}: "
                     )
-
-                mover.move_to_state(
-                    state_controller,
-                    args.goal_time,
-                    blocking=False,
-                )
+                    send_arm = any(abs(value) > 1e-12 for value in command.pose_delta)
+                    send_gripper = abs(command.gripper_delta) > 1e-12
+                    if send_arm or send_gripper:
+                        mover.move_to_state(
+                            state_controller,
+                            args.goal_time,
+                            blocking=False,
+                            send_arm=send_arm,
+                            send_gripper=send_gripper,
+                        )
 
         print(f"\n{args.controller.capitalize()} Cartesian control finished.")
 
@@ -542,6 +705,7 @@ def run(args):
                     state_controller,
                     args,
                     orientation_origin_xy,
+                    position_mode,
                 )
             except Exception as exc:
                 print("Failed to return automatically:", exc)
@@ -616,6 +780,23 @@ def parse_args():
     parser.add_argument("--goal-time", type=float, default=GOAL_TIME)
     parser.add_argument("--reset-goal-time", type=float, default=RESET_GOAL_TIME)
     parser.add_argument("--control-period", type=float, default=CONTROL_PERIOD)
+    parser.add_argument(
+        "--mode-init-wait",
+        type=float,
+        default=MODE_INIT_WAIT,
+        help="Seconds to wait after requesting position mode before probing it.",
+    )
+    parser.add_argument(
+        "--mode-probe-goal-time",
+        type=float,
+        default=MODE_PROBE_GOAL_TIME,
+        help="Goal time in seconds for the startup zero-motion position probe.",
+    )
+    parser.add_argument(
+        "--skip-mode-probe",
+        action="store_true",
+        help="Request position mode but skip the startup zero-motion probe.",
+    )
     parser.add_argument(
         "--max-reach-radius",
         type=float,
