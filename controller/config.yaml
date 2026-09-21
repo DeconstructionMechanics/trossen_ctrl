@@ -15,9 +15,9 @@
 # rollright - rotate -roll
 # gripperopen - open the gripper
 # gripperclose - close the gripper
-# reset - return to the configured return target
-# sensitivityup - increase controller sensitivity
-# sensitivitydown - decrease controller sensitivity
+# reset - return to the startup joints
+# sensitivityup - increase speed level
+# sensitivitydown - decrease speed level
 # quit - stop the control loop
 #
 # Keyboard values are terminal keys. Ctrl-C and Esc always quit.
@@ -41,36 +41,39 @@
 #   ABS_HAT0X - D-pad horizontal; - is left, + is right
 #   ABS_HAT0Y - D-pad vertical; - is up, + is down
 
-sensitivity:
-  default_sensitivity: 5.0
-  min_sensitivity: 0.1
-  max_sensitivity: 15.0
-
 keyboard:
-  forward: w
-  backward: s
-  leftward: a
-  rightward: d
-  upward: e
-  downward: q
-  pitchup: i
-  pitchdown: k
-  yawleft: j
-  yawright: l
-  rollleft: u
-  rollright: o
-  gripperopen: x
-  gripperclose: z
-  reset: c
-  sensitivityup: =
+  forward: "w"
+  backward: "s"
+  leftward: "a"
+  rightward: "d"
+  upward: "e"
+  downward: "q"
+  pitchup: "i"
+  pitchdown: "k"
+  yawleft: "j"
+  yawright: "l"
+  rollleft: "u"
+  rollright: "o"
+  gripperopen: "x"
+  gripperclose: "z"
+  reset: "c"
+  sensitivityup: "="
   sensitivitydown: "-"
+  pause: "p"
+  resume: "r"
 
+# The triggers stay on Z, where their travel sets the descent and climb rate.
+# The gripper is on the D-pad: its force comes from gripper_squeeze rather than
+# from how far a control is pushed. BTN_NORTH and BTN_WEST (X and Y) are unused
+# and are the free buttons to move something onto.
 xbox_buttons:
-  gripperclose: ABS_HAT0X:-
-  gripperopen: ABS_HAT0X:+
+  pause: BTN_EAST
+  resume: BTN_SOUTH
   reset: BTN_SELECT
   rollleft: BTN_TR
   rollright: BTN_TL
+  gripperclose: ABS_HAT0X:-
+  gripperopen: ABS_HAT0X:+
   sensitivityup: ABS_HAT0Y:-
   sensitivitydown: ABS_HAT0Y:+
   quit: BTN_START
@@ -86,3 +89,48 @@ xbox_axes:
   pitchdown: ABS_RY:-
   downward: ABS_Z:+
   upward: ABS_RZ:+
+
+# Joint angles in radians that a long press on View returns to. All zeros is the
+# arm's own neutral configuration, the one the SDK demo scripts finish at. Remove
+# this section to return to wherever the arm was when position control was
+# enabled instead, which drifts lower every session because the brakes let the
+# arm settle. The angles are checked against the SDK joint limits at startup.
+home:
+  joints: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+# Speeds are m/s and rad/s; angular values are 10, 30 and 60 degrees/s.
+# position_lead/rotation_lead are the minimum distance the target may lead
+# feedback; above that the allowed lead is the selected speed times lead_time,
+# which also sets the stopping distance when the controls are released.
+# feedforward scales the commanded velocity sent to the SDK as a goal
+# feedforward velocity; set it to 0 to send positions only.
+teleop:
+  period: 0.02
+  goal_time: 0.06
+  max_dt: 0.1
+  linear_speeds: [0.02, 0.06, 0.12]
+  angular_speeds: [0.1745329252, 0.5235987756, 1.0471975512]
+  gripper_speed: 0.02
+  linear_acceleration: 0.5
+  angular_acceleration: 3.0
+  position_lead: 0.005
+  rotation_lead: 0.0523598776
+  lead_time: 0.08
+  feedforward: 1.0
+  stick_deadzone: 0.1
+  trigger_deadzone: 0.05
+  reset_hold: 1.0
+  reset_time: 3.0
+  trajectory_samples: 3
+  gripper_min: 0.0
+  gripper_max: 0.04
+  # How far the gripper command may close past measured position. Grip force in
+  # position mode comes from that position error, so raise this for a firmer
+  # grip and lower it for a gentler one.
+  gripper_squeeze: 0.004
+  clearance: 0.005
+  # Warn when a session ends this close above the calibrated table, because the
+  # arm settles downward when the brakes engage; sag_settle is how long to wait
+  # before measuring that settling.
+  sag_allowance: 0.03
+  sag_settle: 0.5

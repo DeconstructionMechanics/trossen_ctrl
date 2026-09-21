@@ -1,3 +1,5 @@
 TODO.md
 __pycache__/
-
+*.pyc
+logs/
+workspace.json

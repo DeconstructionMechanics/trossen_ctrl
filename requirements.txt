@@ -1,0 +1,5 @@
+numpy>=2.0,<3
+scipy>=1.13,<2
+evdev>=1.7,<2
+trossen-arm==1.9.3
+PyYAML>=6,<7
