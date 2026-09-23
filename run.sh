@@ -39,4 +39,5 @@ case " $* " in
         ;;
 esac
 
-exec "$PYTHON" test.py --controller xbox --device "$DEVICE" "$@"
+# -u keeps the status line readable when the output is piped or redirected.
+exec "$PYTHON" -u test.py --controller xbox --device "$DEVICE" "$@"

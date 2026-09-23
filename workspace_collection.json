@@ -3,17 +3,17 @@
   "model": "wxai_v0_follower",
   "lower": [
     0.2,
-    -0.295,
+    -0.45,
     0.008
   ],
   "upper": [
     0.46,
-    0.3,
+    0.45,
     0.33
   ],
   "table_z": 0.005,
   "recorded_at": 1790019197.670639,
   "clearance": 0.005,
   "derived_from": "workspace.json",
-  "note": "Collection envelope raises lower X after an SDK singularity at x=0.156 m."
+  "note": "Collection envelope raises lower X after an SDK singularity at x=0.156 m. Y widened to +/-0.45 m from the measured table-height envelope; the far corners beyond r=0.47 m are not reachable."
 }
