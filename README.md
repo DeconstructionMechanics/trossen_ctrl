@@ -62,9 +62,15 @@ a cleared workspace and validate its path during commissioning.
 ## Run
 
 ```bash
+./run.sh                        # Xbox teleoperation with ./workspace.json
+./run.sh --session-seconds 300  # extra arguments are passed through
 python test.py --controller xbox --device /dev/input/event9 --workspace workspace.json
 python test.py --controller keyboard --workspace workspace.json
 ```
+
+`run.sh` picks the gamepad by its stable `/dev/input/by-id` path, falls back to
+the first attached joystick, and refuses to start without a calibration file.
+Set `PYTHON=` or `DEVICE=` in the environment to override either choice.
 
 For a short supervised hand-control trial without a measured workspace file,
 use `--no-workspace-limits --session-seconds 120`. The session starts in fine
@@ -90,6 +96,8 @@ must be released and pressed again before its hold can trigger a return.
 | D-pad left / right | Close / open gripper |
 | D-pad up / down | Increase / decrease speed level |
 | B / A | Pause / resume when neutral |
+| X | Start/stop dataset episode (when a recorder is attached) |
+| Y | Accept reviewed dataset episode |
 | Hold View/Back for 1 second | Return to the configured home joints, preserving gripper opening |
 | Start or Ctrl-C | Stop and exit, without returning or closing |
 
@@ -98,8 +106,8 @@ measured position by that distance, and in position control that error is the
 force. Releasing the D-pad keeps the commanded opening rather than
 resynchronising to feedback, so a grip is not given away, and a pause holds the
 commanded opening for the same reason. Raise `gripper_squeeze` for a firmer
-grip and lower it for a gentler one. `BTN_NORTH` and `BTN_WEST` (X and Y) are
-unbound if you want the gripper on face buttons instead of the D-pad.
+grip and lower it for a gentler one. X and Y publish recorder events and do not
+affect standalone teleoperation.
 
 Keyboard motion bindings are in `controller/config.yaml`; `p` pauses, `r`
 resumes, `c` returns, and Esc/Ctrl-C exits. Terminal key release is inferred from
@@ -130,7 +138,7 @@ The `teleop` section in `controller/config.yaml` controls speeds, deadzones,
 acceleration, timing, lead limits, gripper bounds and clearance. Defaults:
 
 - 50 Hz control, 60 ms SDK goal time, 3 trajectory feasibility samples.
-- Fine/normal/fast translation: 2/6/12 cm/s; rotation: 10/30/60 degrees/s.
+- Fine/normal/fast translation: 2/6/12 cm/s; rotation: 6/18/36 degrees/s.
 - Gripper: 2 cm/s, may close 4 mm past feedback for grip force, and is clipped
   to both configured and SDK position limits.
 - Target lead: at least 5 mm and 3 degrees, otherwise the selected speed times
@@ -168,6 +176,11 @@ input, timing, measured state, targets, sent commands, clipping reasons and stat
 Exceptions include tracebacks. A full queue or write error stops the session
 after a hold/idle attempt. Files are exclusive-create and never overwritten.
 
+The repository is also installable as `trossen-ctrl`. `ControlSession` is the
+shared 50 Hz owner used by both the standalone CLI and the LeRobot recorder; it
+publishes ordered, timestamped `ControlTransition` objects without putting
+camera or dataset I/O on the control thread.
+
 SDK IK failures are logged without guessing whether the cause is endpoint,
 path, singularity, or joint limits. This version does not search alternative
 orientations or silently switch interpolation spaces. Network or driver failure
@@ -182,7 +195,7 @@ gripper, pause/resume and cancellable return. Repeat each chosen reachable path
 Require no unexpected rotation, autonomous fault restart or SDK errors on the
 chosen reachable paths. Measure release-to-hold timing and overshoot: the initial
 normal-speed targets are one control cycle to issue hold, at most the configured
-lead for that level (5 mm and 3 degrees at fine/normal, 9.6 mm and 4.8 degrees at
+lead for that level (5 mm and 3 degrees at fine/normal, 9.6 mm and 3 degrees at
 fast) of additional TCP motion. Also verify at the fast level that motion stops
 when the stream stops, since goal feedforward velocities are now sent. Tune goal time/speed and rerun affected cases
 if those targets are not met. These are acceptance targets, not verified claims.

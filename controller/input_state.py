@@ -167,7 +167,15 @@ class GamepadInput:
                 actions = self._actions()
                 for action in actions - self.previous:
                     mapped = {"sensitivityup": "speed_up", "sensitivitydown": "speed_down"}.get(action, action)
-                    if mapped in {"pause", "resume", "quit", "speed_up", "speed_down"}:
+                    if mapped in {
+                        "pause",
+                        "resume",
+                        "quit",
+                        "speed_up",
+                        "speed_down",
+                        "record_toggle",
+                        "accept",
+                    }:
                         events.add(mapped)
                 if "reset" not in actions:
                     self.reset_since, self.reset_fired = None, False
@@ -242,7 +250,15 @@ class KeyboardInput:
                 events.add("quit")
             action = self.bindings.get(key.lower())
             event = {"sensitivityup": "speed_up", "sensitivitydown": "speed_down"}.get(action, action)
-            if event in {"reset", "pause", "resume", "speed_up", "speed_down"}:
+            if event in {
+                "reset",
+                "pause",
+                "resume",
+                "speed_up",
+                "speed_down",
+                "record_toggle",
+                "accept",
+            }:
                 events.add(event)
             elif action in ACTION_DIRECTIONS or action in GRIPPER_DIRECTIONS:
                 self.active[action] = now

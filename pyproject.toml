@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trossen-ctrl"
+version = "0.1.0"
+description = "Reusable safety controller for the Trossen WidowX AI"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "numpy>=2.0,<3",
+  "scipy>=1.13,<2",
+  "evdev>=1.7,<2",
+  "trossen-arm==1.9.3",
+  "PyYAML>=6,<7",
+]
+
+[project.scripts]
+trossen-teleop = "robot_action:main"
+
+[tool.setuptools]
+py-modules = ["robot_action"]
+
+[tool.setuptools.packages.find]
+include = ["controller*", "trossen_ctrl*"]
+
+[tool.setuptools.package-data]
+controller = ["config.yaml"]
+

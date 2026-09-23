@@ -24,8 +24,8 @@
 # Xbox button values are Linux evdev button names:
 #   BTN_SOUTH - A button
 #   BTN_EAST - B button
-#   BTN_NORTH - Y button
-#   BTN_WEST - X button
+#   BTN_NORTH - X button on the PowerA controller
+#   BTN_WEST - Y button on the PowerA controller
 #   BTN_TL - left bumper (LB)
 #   BTN_TR - right bumper (RB)
 #   BTN_SELECT - View/Back button
@@ -61,11 +61,13 @@ keyboard:
   sensitivitydown: "-"
   pause: "p"
   resume: "r"
+  record_toggle: "v"
+  accept: "b"
 
 # The triggers stay on Z, where their travel sets the descent and climb rate.
 # The gripper is on the D-pad: its force comes from gripper_squeeze rather than
 # from how far a control is pushed. BTN_NORTH and BTN_WEST (X and Y) are unused
-# and are the free buttons to move something onto.
+# do not command arm motion; a recorder uses them for start/stop and accept.
 xbox_buttons:
   pause: BTN_EAST
   resume: BTN_SOUTH
@@ -77,6 +79,8 @@ xbox_buttons:
   sensitivityup: ABS_HAT0Y:-
   sensitivitydown: ABS_HAT0Y:+
   quit: BTN_START
+  record_toggle: BTN_NORTH
+  accept: BTN_WEST
 
 xbox_axes:
   leftward: ABS_X:-
@@ -98,7 +102,7 @@ xbox_axes:
 home:
   joints: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
-# Speeds are m/s and rad/s; angular values are 10, 30 and 60 degrees/s.
+# Speeds are m/s and rad/s; angular values are 6, 18 and 36 degrees/s.
 # position_lead/rotation_lead are the minimum distance the target may lead
 # feedback; above that the allowed lead is the selected speed times lead_time,
 # which also sets the stopping distance when the controls are released.
@@ -109,7 +113,7 @@ teleop:
   goal_time: 0.06
   max_dt: 0.1
   linear_speeds: [0.02, 0.06, 0.12]
-  angular_speeds: [0.1745329252, 0.5235987756, 1.0471975512]
+  angular_speeds: [0.1047197551, 0.3141592654, 0.6283185307]
   gripper_speed: 0.02
   linear_acceleration: 0.5
   angular_acceleration: 3.0

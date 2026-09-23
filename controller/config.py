@@ -1,8 +1,11 @@
 """Load controller settings and key bindings from the project YAML config."""
 
 from pathlib import Path
+from dataclasses import fields
 
 import yaml
+
+from .teleop import Settings
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.yaml")
@@ -42,3 +45,43 @@ def load_keybind_config(path=None):
         home["joints"] = [float(x) for x in joints]
     config["home"] = home
     return config
+
+
+def settings_from_config(path=None, **overrides):
+    """Build validated controller settings from the shared YAML file."""
+    settings = Settings()
+    names = {item.name for item in fields(settings)}
+    for key, value in load_keybind_config(path)["teleop"].items():
+        if key not in names:
+            raise ValueError(f"Unknown teleop setting: {key}")
+        if key in {"linear_speeds", "angular_speeds"}:
+            if not isinstance(value, (list, tuple)):
+                raise ValueError(f"{key} must be a list of three speeds")
+            value = tuple(float(x) for x in value)
+        elif key == "trajectory_samples":
+            value = int(value)
+        else:
+            value = float(value)
+        setattr(settings, key, value)
+    for key, value in overrides.items():
+        if key not in names:
+            raise ValueError(f"Unknown teleop override: {key}")
+        if value is not None:
+            setattr(settings, key, value)
+    settings.validate()
+    return settings
+
+
+def home_joints_from_config(path, limits):
+    joints = load_keybind_config(path)["home"].get("joints")
+    if joints is None:
+        return None
+    if limits and len(joints) != len(limits) - 1:
+        raise ValueError(f"home.joints has {len(joints)} angles but the arm has {len(limits) - 1}")
+    for index, (angle, limit) in enumerate(zip(joints, limits)):
+        if not limit["position_min"] <= angle <= limit["position_max"]:
+            raise ValueError(
+                f"home.joints[{index}] = {angle} is outside the SDK limits "
+                f"[{limit['position_min']}, {limit['position_max']}]"
+            )
+    return joints

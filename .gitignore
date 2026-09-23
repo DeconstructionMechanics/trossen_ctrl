@@ -1,5 +1,7 @@
 TODO.md
 __pycache__/
 *.pyc
+*.egg-info/
+build/
 logs/
 workspace.json

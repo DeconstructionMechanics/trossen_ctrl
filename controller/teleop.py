@@ -14,7 +14,7 @@ class Settings:
     goal_time: float = 0.06
     max_dt: float = 0.1
     linear_speeds: tuple = (0.02, 0.06, 0.12)
-    angular_speeds: tuple = tuple(math.radians(x) for x in (10, 30, 60))
+    angular_speeds: tuple = tuple(math.radians(x) for x in (6, 18, 36))
     gripper_speed: float = 0.02
     linear_acceleration: float = 0.5
     angular_acceleration: float = 3.0

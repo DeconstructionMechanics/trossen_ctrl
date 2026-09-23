@@ -13,6 +13,7 @@ from scipy.spatial.transform import Rotation
 from controller.config import load_keybind_config
 from controller.input_state import GamepadInput, radial_pair
 from controller.runtime import DiagnosticLog, SDKDriver, SimDriver, calibrate, load_workspace
+from controller.session import ControlSession
 from controller.teleop import Intent, Sample, Settings, Teleop, Workspace
 from controller.xbox import ecodes
 from robot_action import parse_args, run, settings_for
@@ -292,7 +293,7 @@ class ControlTests(unittest.TestCase):
         for _ in range(30):
             self.tick(Intent(linear=(1, 1, 1), angular=(1, 1, 1)))
         self.assertLessEqual(np.linalg.norm(self.engine.velocity), .06000001)
-        self.assertLessEqual(np.linalg.norm(self.engine.omega), math.radians(30) + 1e-8)
+        self.assertLessEqual(np.linalg.norm(self.engine.omega), math.radians(18) + 1e-8)
 
     def test_return_uses_startup_joints_and_preserves_gripper(self):
         self.driver.joints[:] = .5
@@ -368,6 +369,13 @@ class InputTests(unittest.TestCase):
         self.device.event(ecodes.EV_ABS, ecodes.ABS_X, 100)
         first = self.input.poll(0)
         self.assertEqual(first.linear, self.input.poll(2).linear)
+
+    def test_record_and_accept_buttons_are_edge_events(self):
+        self.device.event(ecodes.EV_KEY, ecodes.BTN_NORTH, 1)
+        self.assertIn("record_toggle", self.input.poll(0).events)
+        self.assertNotIn("record_toggle", self.input.poll(.02).events)
+        self.device.event(ecodes.EV_KEY, ecodes.BTN_WEST, 1)
+        self.assertIn("accept", self.input.poll(.04).events)
 
     def test_held_reset_at_attach_needs_a_release_first(self):
         device = FakeDevice()
